@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+requests
+sqlalchemy
+chromadb
+streamlit
+hindsight-client==0.10.1
+hindsight-api==0.10.1
