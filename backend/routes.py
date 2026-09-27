@@ -16,10 +16,6 @@ from hindsight_client import Hindsight
 router = APIRouter()
 
 
-# ---------------------------------------------------------
-# Request Models
-# ---------------------------------------------------------
-
 class IncidentRequest(BaseModel):
     description: str
 
@@ -29,10 +25,6 @@ class CreateIncidentRequest(BaseModel):
     description: str
     severity: str = "medium"
 
-
-# ---------------------------------------------------------
-# GET ALL INCIDENTS
-# ---------------------------------------------------------
 
 @router.get("/incidents")
 def get_incidents():
@@ -60,10 +52,6 @@ def get_incidents():
 
     return result
 
-
-# ---------------------------------------------------------
-# CREATE NEW INCIDENT
-# ---------------------------------------------------------
 
 @router.post("/incidents")
 def create_incident(request: CreateIncidentRequest):
@@ -96,10 +84,6 @@ def create_incident(request: CreateIncidentRequest):
     return result
 
 
-# ---------------------------------------------------------
-# ANALYZE INCIDENT
-# ---------------------------------------------------------
-
 @router.post("/analyze")
 async def analyze_new_incident(request: IncidentRequest):
 
@@ -109,10 +93,6 @@ async def analyze_new_incident(request: IncidentRequest):
 
     return result
 
-
-# ---------------------------------------------------------
-# RESOLVE INCIDENT + STORE POST-MORTEM IN HINDSIGHT
-# ---------------------------------------------------------
 
 @router.put("/incidents/{incident_id}/outcome")
 async def update_incident_outcome(
@@ -138,7 +118,7 @@ async def update_incident_outcome(
             "error": "Incident not found"
         }
 
-    # Update database
+    # Update incident with confirmed operational outcome
     incident.root_cause = root_cause
     incident.resolution = resolution
     incident.outcome = outcome
@@ -148,12 +128,15 @@ async def update_incident_outcome(
 
     db.refresh(incident)
 
-    # -----------------------------------------------------
-    # Build post-mortem
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Build structured learning memory for Hindsight
+    # ---------------------------------------------------------
 
     post_mortem = f"""
-Incident: {incident.title}
+INCIDENT LEARNING RECORD
+
+Incident:
+{incident.title}
 
 Description:
 {incident.description}
@@ -161,28 +144,41 @@ Description:
 Severity:
 {incident.severity}
 
-Root Cause:
+Confirmed Root Cause:
 {incident.root_cause}
 
-Resolution:
+Successful Resolution:
 {incident.resolution}
 
-Outcome:
+Observed Outcome:
 {incident.outcome}
 
-Status:
-Resolved
+Operational Lesson:
+Future incidents showing similar symptoms should
+consider this incident as historical evidence.
 
-This incident is a confirmed production incident.
+Important Signals:
+- Incident type: {incident.title}
+- Severity: {incident.severity}
+- Root cause pattern: {incident.root_cause}
+- Resolution pattern: {incident.resolution}
 
+Learning Status:
+Confirmed successful resolution.
+
+This is a confirmed production incident.
 The root cause, resolution, and outcome are confirmed
 operational knowledge and should be considered when
 analyzing future incidents.
+
+Do not treat this memory as proof that the same root
+cause exists in a future incident. Use it as historical
+evidence and recommend investigation before remediation.
 """
 
-    # -----------------------------------------------------
-    # Store learning in Hindsight
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Store the learned incident in Hindsight
+    # ---------------------------------------------------------
 
     hindsight = Hindsight(
         base_url=HINDSIGHT_URL
@@ -193,7 +189,7 @@ analyzing future incidents.
         hindsight_result = await hindsight.aretain(
             bank_id=BANK_ID,
             content=post_mortem,
-            context="resolved incident post-mortem"
+            context="resolved incident post-mortem and operational learning"
         )
 
         result = {
