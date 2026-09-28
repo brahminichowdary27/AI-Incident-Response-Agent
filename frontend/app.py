@@ -3,10 +3,11 @@ import requests
 
 
 # =========================================================
-# CONFIG
+# CONFIGURATION
 # =========================================================
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = "https://ai-incident-response-agent-fj85.onrender.com"
+
 
 st.set_page_config(
     page_title="IncidentMind",
@@ -16,284 +17,111 @@ st.set_page_config(
 
 
 # =========================================================
-# CUSTOM STYLING
-# =========================================================
-
-st.markdown(
-    """
-    <style>
-
-    .main-title {
-        font-size: 42px;
-        font-weight: 800;
-        margin-bottom: 5px;
-    }
-
-    .subtitle {
-        font-size: 17px;
-        color: #9ca3af;
-        margin-bottom: 25px;
-    }
-
-    .memory-card {
-        padding: 18px;
-        border: 1px solid #3f3f46;
-        border-radius: 12px;
-        margin-bottom: 12px;
-        background: #111318;
-        min-height: 120px;
-    }
-
-    .section-title {
-        font-size: 25px;
-        font-weight: 700;
-        margin-top: 15px;
-        margin-bottom: 10px;
-    }
-
-    .flow-box {
-        text-align: center;
-        padding: 15px;
-        border: 1px solid #3f3f46;
-        border-radius: 12px;
-        background: #111318;
-    }
-
-    .small-text {
-        color: #9ca3af;
-        font-size: 14px;
-    }
-
-    .learning-box {
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #3f3f46;
-        background: #111318;
-        margin-top: 10px;
-    }
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-
-defaults = {
-    "incident_id": None,
-    "analysis": None,
-    "memories": [],
-    "incident_description": "",
-    "incident_title": "",
-    "severity": "high",
-    "resolved": False,
-    "resolution_message": ""
-}
-
-for key, value in defaults.items():
-
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-
-# =========================================================
 # HEADER
 # =========================================================
 
-st.markdown(
-    '<div class="main-title">🧠 IncidentMind</div>',
-    unsafe_allow_html=True
-)
+st.title("🧠 IncidentMind")
 
 st.markdown(
     """
-    <div class="subtitle">
-    AI-powered incident response that remembers what happened before,
-    reasons from historical experience, and learns from every resolved incident.
-    </div>
-    """,
-    unsafe_allow_html=True
+### AI-Powered Incident Response Agent
+
+IncidentMind analyzes production incidents using **Gemini AI**
+and learns from previous incidents using **Hindsight Cloud**.
+"""
 )
 
 
 # =========================================================
-# SYSTEM FLOW
+# ARCHITECTURE
 # =========================================================
 
-flow1, flow2, flow3, flow4, flow5 = st.columns(5)
+st.markdown("### How IncidentMind Works")
 
-with flow1:
-    st.markdown(
-        """
-        <div class="flow-box">
-        🚨<br>
-        <b>Incident</b><br>
-        <span class="small-text">New event</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+cols = st.columns(5)
 
-with flow2:
-    st.markdown(
-        """
-        <div class="flow-box">
-        🧠<br>
-        <b>Recall</b><br>
-        <span class="small-text">Hindsight</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+steps = [
+    ("🚨", "Incident"),
+    ("🧠", "Recall"),
+    ("🤖", "Analyze"),
+    ("🛠️", "Resolve"),
+    ("📚", "Learn")
+]
 
-with flow3:
-    st.markdown(
-        """
-        <div class="flow-box">
-        🤖<br>
-        <b>Analyze</b><br>
-        <span class="small-text">Local AI</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+for col, (icon, name) in zip(cols, steps):
 
-with flow4:
-    st.markdown(
-        """
-        <div class="flow-box">
-        🛠️<br>
-        <b>Resolve</b><br>
-        <span class="small-text">Engineer</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    with col:
 
-with flow5:
-    st.markdown(
-        """
-        <div class="flow-box">
-        🔄<br>
-        <b>Learn</b><br>
-        <span class="small-text">Retain</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-st.divider()
+        st.markdown(
+            f"""
+            <div style="
+                border:1px solid #444;
+                border-radius:12px;
+                padding:18px;
+                text-align:center;
+                margin-bottom:20px;
+            ">
+                <div style="font-size:30px">{icon}</div>
+                <b>{name}</b>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 
 # =========================================================
-# NEW INCIDENT
+# INCIDENT INPUT
 # =========================================================
 
-st.markdown(
-    '<div class="section-title">🚨 New Incident</div>',
-    unsafe_allow_html=True
+st.markdown("## 🚨 New Incident")
+
+description = st.text_area(
+    "Describe the production incident",
+    placeholder=(
+        "Example: Payment API is returning HTTP 503 errors "
+        "during peak traffic. Database connections are "
+        "reaching the configured maximum."
+    ),
+    height=140
 )
 
-col1, col2 = st.columns([2, 1])
 
-with col1:
-
-    title = st.text_input(
-        "Incident Title",
-        value=st.session_state.incident_title,
-        placeholder="Example: Payment API outage"
-    )
-
-with col2:
-
-    severity_options = [
+severity = st.selectbox(
+    "Severity",
+    [
         "low",
         "medium",
         "high",
         "critical"
     ]
-
-    severity = st.selectbox(
-        "Severity",
-        severity_options,
-        index=severity_options.index(
-            st.session_state.severity
-        )
-    )
-
-
-description = st.text_area(
-    "Incident Description",
-    value=st.session_state.incident_description,
-    height=150,
-    placeholder=(
-        "Describe the symptoms, errors, affected service, "
-        "resource usage, recent deployments, etc."
-    )
 )
 
 
-analyze_button = st.button(
-    "🤖 Analyze Incident",
+# =========================================================
+# ANALYZE BUTTON
+# =========================================================
+
+if st.button(
+    "🔍 Analyze Incident",
     type="primary",
-    use_container_width=False
-)
+    use_container_width=True
+):
 
-
-# =========================================================
-# ANALYZE INCIDENT
-# =========================================================
-
-if analyze_button:
-
-    if not title.strip() or not description.strip():
+    if not description.strip():
 
         st.warning(
-            "Please enter both an incident title and description."
+            "Please describe the incident first."
         )
 
     else:
 
-        st.session_state.incident_title = title
-        st.session_state.incident_description = description
-        st.session_state.severity = severity
+        with st.spinner(
+            "IncidentMind is recalling Hindsight memories and analyzing the incident..."
+        ):
 
-        try:
+            try:
 
-            with st.spinner(
-                "🧠 Creating incident and recalling Hindsight memory..."
-            ):
-
-                # -----------------------------------------
-                # CREATE INCIDENT
-                # -----------------------------------------
-
-                create_response = requests.post(
-                    f"{API_URL}/incidents",
-                    json={
-                        "title": title,
-                        "description": description,
-                        "severity": severity
-                    },
-                    timeout=30
-                )
-
-                create_response.raise_for_status()
-
-                incident = create_response.json()
-
-                incident_id = incident["id"]
-
-
-                # -----------------------------------------
-                # AI ANALYSIS
-                # -----------------------------------------
-
-                analyze_response = requests.post(
+                response = requests.post(
                     f"{API_URL}/analyze",
                     json={
                         "description": description
@@ -301,113 +129,98 @@ if analyze_button:
                     timeout=180
                 )
 
-                analyze_response.raise_for_status()
 
-                result = analyze_response.json()
+                if response.status_code != 200:
+
+                    st.error(
+                        f"Analysis failed: HTTP {response.status_code}"
+                    )
+
+                    st.code(
+                        response.text
+                    )
+
+                else:
+
+                    result = response.json()
+
+                    st.session_state["result"] = result
+                    st.session_state["description"] = description
+                    st.session_state["severity"] = severity
 
 
-                # -----------------------------------------
-                # STORE RESULT
-                # -----------------------------------------
+            except requests.exceptions.RequestException as e:
 
-                st.session_state.incident_id = incident_id
-
-                st.session_state.analysis = (
-                    result["analysis"]
+                st.error(
+                    f"Could not connect to IncidentMind API: {e}"
                 )
 
-                st.session_state.memories = (
-                    result["historical_incidents"]
+
+# =========================================================
+# DISPLAY RESULT
+# =========================================================
+
+if "result" in st.session_state:
+
+    result = st.session_state["result"]
+
+    st.markdown("---")
+
+    # =====================================================
+    # HINDSIGHT MEMORY
+    # =====================================================
+
+    st.markdown("## 🧠 Hindsight Historical Memory")
+
+    historical = result.get(
+        "historical_incidents",
+        []
+    )
+
+
+    if historical:
+
+        for index, memory in enumerate(
+            historical,
+            start=1
+        ):
+
+            with st.expander(
+                f"Historical Memory {index}"
+            ):
+
+                st.write(
+                    memory.get(
+                        "memory",
+                        ""
+                    )
                 )
 
-                st.session_state.resolved = False
+    else:
 
-                st.session_state.resolution_message = ""
-
-
-            st.success(
-                f"✅ Incident #{incident_id} analyzed successfully."
-            )
-
-        except requests.exceptions.RequestException as e:
-
-            st.error(
-                f"Backend error: {e}"
-            )
-
-
-# =========================================================
-# HINDSIGHT HISTORICAL MEMORY
-# =========================================================
-
-if st.session_state.memories:
-
-    st.divider()
-
-    st.markdown(
-        '<div class="section-title">🧠 Hindsight Historical Memory</div>',
-        unsafe_allow_html=True
-    )
-
-    st.caption(
-        "Relevant operational knowledge recalled from previous incidents."
-    )
-
-    memory_col1, memory_col2 = st.columns(2)
-
-    for index, memory in enumerate(
-        st.session_state.memories,
-        start=1
-    ):
-
-        if index % 2 == 1:
-            target_col = memory_col1
-        else:
-            target_col = memory_col2
-
-        with target_col:
-
-            st.markdown(
-                f"""
-                <div class="memory-card">
-                    <b>Memory {index}</b>
-                    <br><br>
-                    {memory["memory"]}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-
-# =========================================================
-# AI INCIDENT ANALYSIS
-# =========================================================
-
-if st.session_state.analysis:
-
-    analysis = st.session_state.analysis
-
-    st.divider()
-
-    st.markdown(
-        '<div class="section-title">🤖 AI Incident Analysis</div>',
-        unsafe_allow_html=True
-    )
-
-
-    # -----------------------------------------
-    # ROOT CAUSE + CONFIDENCE
-    # -----------------------------------------
-
-    root_col, confidence_col = st.columns(
-        [3, 1]
-    )
-
-    with root_col:
-
-        st.markdown(
-            "### Probable Root Cause"
+        st.info(
+            "No relevant historical memories were found."
         )
+
+
+    # =====================================================
+    # AI ANALYSIS
+    # =====================================================
+
+    analysis = result.get(
+        "analysis",
+        {}
+    )
+
+    st.markdown("## 🤖 AI Incident Analysis")
+
+
+    col1, col2 = st.columns(2)
+
+
+    with col1:
+
+        st.markdown("### Probable Root Cause")
 
         st.info(
             analysis.get(
@@ -417,11 +230,9 @@ if st.session_state.analysis:
         )
 
 
-    with confidence_col:
+    with col2:
 
-        st.markdown(
-            "### Confidence"
-        )
+        st.markdown("### Confidence")
 
         confidence = analysis.get(
             "confidence",
@@ -429,252 +240,207 @@ if st.session_state.analysis:
         )
 
         st.metric(
-            "AI Confidence",
+            "Confidence",
             confidence
         )
 
 
-    # -----------------------------------------
-    # REASONING
-    # -----------------------------------------
-
-    st.markdown(
-        "### 🧩 Reasoning"
-    )
+    st.markdown("### Reasoning")
 
     st.write(
         analysis.get(
             "reasoning",
-            "No reasoning available."
+            ""
         )
     )
 
 
-    # -----------------------------------------
-    # INVESTIGATION + REMEDIATION
-    # -----------------------------------------
-
-    investigation_col, remediation_col = st.columns(2)
-
-
-    with investigation_col:
-
-        st.markdown(
-            "### 🔎 Investigation Steps"
-        )
-
-        steps = analysis.get(
-            "investigation_steps",
-            []
-        )
-
-        if steps:
-
-            for step in steps:
-
-                st.markdown(
-                    f"- {step}"
-                )
-
-        else:
-
-            st.write(
-                "No investigation steps provided."
-            )
-
-
-    with remediation_col:
-
-        st.markdown(
-            "### 🛠️ Recommended Remediation"
-        )
-
-        actions = analysis.get(
-            "recommended_remediation",
-            []
-        )
-
-        if actions:
-
-            for action in actions:
-
-                st.markdown(
-                    f"- {action}"
-                )
-
-        else:
-
-            st.write(
-                "No remediation recommendations provided."
-            )
-
-
-# =========================================================
-# RESOLVE INCIDENT
-# =========================================================
-
-if st.session_state.incident_id:
-
-    st.divider()
+    # =====================================================
+    # INVESTIGATION
+    # =====================================================
 
     st.markdown(
-        '<div class="section-title">✅ Resolve Incident</div>',
-        unsafe_allow_html=True
+        "### 🔎 Investigation Steps"
     )
 
-    st.caption(
-        "Confirm the actual root cause, resolution, and outcome. "
-        "The completed post-mortem will become persistent Hindsight memory."
+    investigation_steps = analysis.get(
+        "investigation_steps",
+        []
     )
 
+
+    for step in investigation_steps:
+
+        st.markdown(
+            f"- {step}"
+        )
+
+
+    # =====================================================
+    # REMEDIATION
+    # =====================================================
+
+    st.markdown(
+        "### 🛠️ Recommended Remediation"
+    )
+
+    remediation = analysis.get(
+        "recommended_remediation",
+        []
+    )
+
+
+    for action in remediation:
+
+        st.markdown(
+            f"- {action}"
+        )
+
+
+    # =====================================================
+    # RESOLVE INCIDENT
+    # =====================================================
+
+    st.markdown("---")
+
+    st.markdown(
+        "## ✅ Resolve & Teach IncidentMind"
+    )
 
     root_cause = st.text_input(
-        "Confirmed Root Cause"
+        "Confirmed Root Cause",
+        value=analysis.get(
+            "probable_root_cause",
+            ""
+        )
     )
 
 
     resolution = st.text_area(
         "Resolution",
-        height=100
+        placeholder=(
+            "Describe what was done to resolve the incident."
+        )
     )
 
 
     outcome = st.text_area(
         "Outcome",
-        height=100
+        placeholder=(
+            "Describe the result after remediation."
+        )
     )
 
 
-    resolve_button = st.button(
-        "🧠 Resolve & Store in Hindsight",
-        type="secondary"
-    )
+    # =====================================================
+    # CREATE LOCAL INCIDENT FIRST
+    # =====================================================
 
+    if st.button(
+        "💾 Resolve & Store in Hindsight",
+        type="primary",
+        use_container_width=True
+    ):
 
-    if resolve_button:
+        try:
 
-        if (
-            not root_cause.strip()
-            or not resolution.strip()
-            or not outcome.strip()
-        ):
+            # ---------------------------------------------
+            # Create incident
+            # ---------------------------------------------
 
-            st.warning(
-                "Please fill in root cause, resolution, and outcome."
+            create_response = requests.post(
+                f"{API_URL}/incidents",
+                json={
+                    "title": "IncidentMind analyzed incident",
+                    "description": st.session_state["description"],
+                    "severity": st.session_state["severity"]
+                },
+                timeout=60
             )
 
-        else:
 
-            try:
+            if create_response.status_code != 200:
 
-                with st.spinner(
-                    "🧠 Storing post-mortem in Hindsight..."
-                ):
+                st.error(
+                    f"Could not create incident: "
+                    f"{create_response.text}"
+                )
 
-                    response = requests.put(
-                        f"{API_URL}/incidents/"
-                        f"{st.session_state.incident_id}/outcome",
+            else:
 
-                        params={
-                            "root_cause": root_cause,
-                            "resolution": resolution,
-                            "outcome": outcome
-                        },
+                incident = create_response.json()
 
-                        timeout=180
+                incident_id = incident["id"]
+
+
+                # -----------------------------------------
+                # Resolve + retain
+                # -----------------------------------------
+
+                outcome_response = requests.put(
+                    f"{API_URL}/incidents/{incident_id}/outcome",
+                    params={
+                        "root_cause": root_cause,
+                        "resolution": resolution,
+                        "outcome": outcome
+                    },
+                    timeout=120
+                )
+
+
+                if outcome_response.status_code != 200:
+
+                    st.error(
+                        "Incident was created, but learning failed."
                     )
 
-                    response.raise_for_status()
-
-                    result = response.json()
-
-
-                if result.get(
-                    "hindsight_memory_stored"
-                ):
-
-                    st.session_state.resolved = True
-
-                    st.session_state.resolution_message = (
-                        "Incident resolved and post-mortem stored in Hindsight."
-                    )
-
-                    st.success(
-                        "🧠 Incident resolved and post-mortem stored in Hindsight."
+                    st.code(
+                        outcome_response.text
                     )
 
                 else:
 
-                    st.warning(
-                        "Incident resolved, but Hindsight memory "
-                        "was not confirmed."
+                    stored = outcome_response.json()
+
+
+                    st.success(
+                        "Incident resolved successfully!"
                     )
 
 
-            except requests.exceptions.RequestException as e:
-
-                st.error(
-                    f"Failed to resolve incident: {e}"
-                )
-
-
-# =========================================================
-# LEARNING STATUS
-# =========================================================
-
-if st.session_state.resolved:
-
-    st.divider()
-
-    st.markdown(
-        """
-        <div class="learning-box">
-
-        ### 🔄 Agent Learned From This Incident
-
-        The confirmed root cause, resolution, and outcome have
-        been retained in <b>Hindsight</b>.
-
-        Future incidents can recall this operational experience
-        and use it as historical evidence during analysis.
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+                    st.success(
+                        "🧠 IncidentMind learned from this incident "
+                        "and stored the post-mortem in Hindsight Cloud."
+                    )
 
 
-# =========================================================
-# START NEW INCIDENT
-# ONLY SHOW AFTER AN INCIDENT EXISTS
-# =========================================================
+                    st.json(
+                        stored
+                    )
 
-if st.session_state.incident_id:
 
-    st.divider()
+                    st.markdown(
+                        """
+                        ### 🔁 Agent Learning Loop
 
-    if st.button(
-        "🔄 Start New Incident"
-    ):
+                        **Incident → Recall → Analyze → Resolve → Retain → Future Recall**
+                        """
+                    )
 
-        st.session_state.incident_id = None
-        st.session_state.analysis = None
-        st.session_state.memories = []
-        st.session_state.incident_description = ""
-        st.session_state.incident_title = ""
-        st.session_state.severity = "high"
-        st.session_state.resolved = False
-        st.session_state.resolution_message = ""
 
-        st.rerun()
+        except requests.exceptions.RequestException as e:
+
+            st.error(
+                f"Connection error: {e}"
+            )
 
 
 # =========================================================
 # FOOTER
 # =========================================================
 
-st.divider()
+st.markdown("---")
 
 st.caption(
-    "IncidentMind • FastAPI + Ollama + Hindsight • Persistent AI Incident Memory"
+    "IncidentMind • FastAPI + Gemini + Hindsight Cloud • Persistent AI Incident Memory"
 )

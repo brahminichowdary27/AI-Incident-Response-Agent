@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from backend.database import SessionLocal
 from backend.models import Incident
@@ -10,11 +11,16 @@ from backend.agent import (
     BANK_ID,
     analyze_incident
 )
+
 from hindsight_client import Hindsight
 
 
 router = APIRouter()
 
+
+# =========================================================
+# REQUEST MODELS
+# =========================================================
 
 class IncidentRequest(BaseModel):
     description: str
@@ -26,73 +32,107 @@ class CreateIncidentRequest(BaseModel):
     severity: str = "medium"
 
 
+# =========================================================
+# DATABASE HELPER
+# =========================================================
+
+def get_db():
+    db = SessionLocal()
+
+    try:
+        return db
+    except Exception:
+        db.close()
+        raise
+
+
+# =========================================================
+# GET INCIDENTS
+# =========================================================
+
 @router.get("/incidents")
 def get_incidents():
 
-    db = SessionLocal()
+    db: Session = get_db()
 
-    incidents = db.query(Incident).all()
+    try:
+        incidents = (
+            db.query(Incident)
+            .order_by(Incident.id.desc())
+            .all()
+        )
 
-    result = []
+        return incidents
 
-    for incident in incidents:
+    finally:
+        db.close()
 
-        result.append({
-            "id": incident.id,
-            "title": incident.title,
-            "description": incident.description,
-            "severity": incident.severity,
-            "root_cause": incident.root_cause,
-            "resolution": incident.resolution,
-            "outcome": incident.outcome,
-            "status": incident.status
-        })
 
-    db.close()
-
-    return result
-
+# =========================================================
+# CREATE INCIDENT
+# =========================================================
 
 @router.post("/incidents")
 def create_incident(request: CreateIncidentRequest):
 
-    db = SessionLocal()
+    db: Session = get_db()
 
-    incident = Incident(
-        title=request.title,
-        description=request.description,
-        severity=request.severity,
-        status="open"
-    )
+    try:
 
-    db.add(incident)
+        incident = Incident(
+            title=request.title,
+            description=request.description,
+            severity=request.severity,
+            status="open"
+        )
 
-    db.commit()
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
 
-    db.refresh(incident)
+        return {
+            "id": incident.id,
+            "title": incident.title,
+            "description": incident.description,
+            "severity": incident.severity,
+            "status": incident.status
+        }
 
-    result = {
-        "id": incident.id,
-        "title": incident.title,
-        "description": incident.description,
-        "severity": incident.severity,
-        "status": incident.status
-    }
+    finally:
+        db.close()
 
-    db.close()
 
-    return result
-
+# =========================================================
+# ANALYZE NEW INCIDENT
+# =========================================================
 
 @router.post("/analyze")
 async def analyze_new_incident(request: IncidentRequest):
 
-    result = await analyze_incident(
-        request.description
-    )
+    try:
 
-    return result
+        result = await analyze_incident(
+            request.description
+        )
 
+        return result
+
+    except Exception as e:
+
+        print(
+            "ANALYZE ERROR:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Incident analysis failed."
+        )
+
+
+# =========================================================
+# UPDATE INCIDENT OUTCOME
+# =========================================================
 
 @router.put("/incidents/{incident_id}/outcome")
 async def update_incident_outcome(
@@ -102,40 +142,68 @@ async def update_incident_outcome(
     outcome: str
 ):
 
-    db = SessionLocal()
+    db: Session = get_db()
 
-    incident = (
-        db.query(Incident)
-        .filter(Incident.id == incident_id)
-        .first()
-    )
+    try:
 
-    if not incident:
+        # ---------------------------------------------
+        # 1. Find incident
+        # ---------------------------------------------
 
-        db.close()
+        incident = (
+            db.query(Incident)
+            .filter(Incident.id == incident_id)
+            .first()
+        )
 
-        return {
-            "error": "Incident not found"
-        }
+        if not incident:
 
-    # Update incident with confirmed operational outcome
-    incident.root_cause = root_cause
-    incident.resolution = resolution
-    incident.outcome = outcome
-    incident.status = "resolved"
+            raise HTTPException(
+                status_code=404,
+                detail="Incident not found."
+            )
 
-    db.commit()
 
-    db.refresh(incident)
+        # ---------------------------------------------
+        # 2. Update local incident record
+        # ---------------------------------------------
 
-    # ---------------------------------------------------------
-    # Build structured learning memory for Hindsight
-    # ---------------------------------------------------------
+        incident.root_cause = root_cause
+        incident.resolution = resolution
+        incident.outcome = outcome
+        incident.status = "resolved"
 
-    post_mortem = f"""
-INCIDENT LEARNING RECORD
+        db.commit()
+        db.refresh(incident)
 
-Incident:
+
+        # ---------------------------------------------
+        # 3. Store learning in Hindsight Cloud
+        # ---------------------------------------------
+
+        if not HINDSIGHT_API_KEY:
+
+            raise HTTPException(
+                status_code=500,
+                detail="HINDSIGHT_API_KEY is not configured."
+            )
+
+
+        hindsight = Hindsight(
+            base_url=HINDSIGHT_URL,
+            api_key=HINDSIGHT_API_KEY
+        )
+
+
+        try:
+
+            memory_content = f"""
+Incident Response Post-Mortem
+
+Incident ID:
+{incident.id}
+
+Title:
 {incident.title}
 
 Description:
@@ -144,68 +212,68 @@ Description:
 Severity:
 {incident.severity}
 
-Confirmed Root Cause:
-{incident.root_cause}
+Root Cause:
+{root_cause}
 
-Successful Resolution:
-{incident.resolution}
+Resolution:
+{resolution}
 
-Observed Outcome:
-{incident.outcome}
+Outcome:
+{outcome}
 
-Operational Lesson:
-Future incidents showing similar symptoms should
-consider this incident as historical evidence.
+Status:
+Resolved
 
-Important Signals:
-- Incident type: {incident.title}
-- Severity: {incident.severity}
-- Root cause pattern: {incident.root_cause}
-- Resolution pattern: {incident.resolution}
-
-Learning Status:
-Confirmed successful resolution.
-
-This is a confirmed production incident.
-The root cause, resolution, and outcome are confirmed
-operational knowledge and should be considered when
-analyzing future incidents.
-
-Do not treat this memory as proof that the same root
-cause exists in a future incident. Use it as historical
-evidence and recommend investigation before remediation.
+This is confirmed incident-response knowledge that
+can be used to improve future incident analysis.
 """
 
-    # ---------------------------------------------------------
-    # Store the learned incident in Hindsight
-    # ---------------------------------------------------------
 
-    hindsight = Hindsight(
-    base_url=HINDSIGHT_URL,
-    api_key=HINDSIGHT_API_KEY
-)
+            retain_result = await hindsight.aretain(
+                bank_id=BANK_ID,
+                content=memory_content,
+                context="incident response post-mortem"
+            )
 
-    try:
 
-        hindsight_result = await hindsight.aretain(
-            bank_id=BANK_ID,
-            content=post_mortem,
-            context="resolved incident post-mortem and operational learning"
+        finally:
+
+            await hindsight.aclose()
+
+
+        # ---------------------------------------------
+        # 4. Return result
+        # ---------------------------------------------
+
+        return {
+            "message": "Incident resolved and learned by Hindsight.",
+            "incident_id": incident.id,
+            "status": incident.status,
+            "hindsight_stored": retain_result.success
+        }
+
+
+    except HTTPException:
+
+        db.rollback()
+        raise
+
+
+    except Exception as e:
+
+        db.rollback()
+
+        print(
+            "OUTCOME ERROR:",
+            repr(e)
         )
 
-        result = {
-            "id": incident.id,
-            "status": incident.status,
-            "root_cause": incident.root_cause,
-            "resolution": incident.resolution,
-            "outcome": incident.outcome,
-            "hindsight_memory_stored": hindsight_result.success
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update incident outcome."
+        )
+
 
     finally:
 
-        await hindsight.aclose()
-
         db.close()
-
-    return result

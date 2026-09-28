@@ -1,8 +1,17 @@
 from fastapi import FastAPI
+
 from backend.routes import router
+from backend.database import engine
+from backend.models import Base
 
 
-app = FastAPI(title="AI Incident Response Agent")
+# Create database tables when the service starts.
+Base.metadata.create_all(bind=engine)
+
+
+app = FastAPI(
+    title="AI Incident Response Agent"
+)
 
 app.include_router(router)
 

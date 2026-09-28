@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "sqlite:///./data/incidents.db"
+# Render-compatible temporary SQLite database.
+# Persistent incident learning is handled by Hindsight Cloud.
+DATABASE_URL = "sqlite:////tmp/incidents.db"
 
 engine = create_engine(
     DATABASE_URL,
