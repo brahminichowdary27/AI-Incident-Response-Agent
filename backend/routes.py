@@ -6,10 +6,10 @@ from backend.models import Incident
 
 from backend.agent import (
     HINDSIGHT_URL,
+    HINDSIGHT_API_KEY,
     BANK_ID,
     analyze_incident
 )
-
 from hindsight_client import Hindsight
 
 
@@ -181,8 +181,9 @@ evidence and recommend investigation before remediation.
     # ---------------------------------------------------------
 
     hindsight = Hindsight(
-        base_url=HINDSIGHT_URL
-    )
+    base_url=HINDSIGHT_URL,
+    api_key=HINDSIGHT_API_KEY
+)
 
     try:
 
