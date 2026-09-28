@@ -1,23 +1,25 @@
-import requests
+import os
 
+from dotenv import load_dotenv
+from google import genai
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "llama3.2:3b"
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+MODEL = "gemini-3.8-flash"
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is not configured.")
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def generate_response(prompt):
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False
-        },
-        timeout=120
+
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt
     )
 
-    response.raise_for_status()
-
-    data = response.json()
-
-    return data["response"]
+    return response.text
