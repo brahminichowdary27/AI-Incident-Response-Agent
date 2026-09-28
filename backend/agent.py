@@ -1,199 +1,78 @@
 import json
+import os
 
+from dotenv import load_dotenv
 from backend.llm import generate_response
 from hindsight_client import Hindsight
 
+load_dotenv()
 
-HINDSIGHT_URL = "http://localhost:8888"
 
-# Final Hindsight memory bank for the hackathon
+# ==============================
+# HINDSIGHT CLOUD CONFIGURATION
+# ==============================
+
+HINDSIGHT_URL = "https://api.hindsight.vectorize.io"
+HINDSIGHT_API_KEY = os.getenv("HINDSIGHT_API_KEY")
+
 BANK_ID = "incident-response-final"
 
 
+# ==============================
+# INCIDENT ANALYSIS AGENT
+# ==============================
+
 async def analyze_incident(incident_description):
 
+    if not HINDSIGHT_API_KEY:
+        raise RuntimeError(
+            "HINDSIGHT_API_KEY is not configured."
+        )
+
     hindsight = Hindsight(
-        base_url=HINDSIGHT_URL
+        base_url=HINDSIGHT_URL,
+        api_key=HINDSIGHT_API_KEY
     )
 
     try:
 
-        # ---------------------------------------------------------
-        # RECALL RELEVANT HISTORICAL EXPERIENCE FROM HINDSIGHT
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 1. RECALL HISTORICAL INCIDENTS
+        # --------------------------------
 
         recall_result = await hindsight.arecall(
             bank_id=BANK_ID,
             query=incident_description,
-
-            types=[
-                "observation",
-                "experience",
-                "world"
-            ],
-
             max_tokens=900,
-            budget="mid",
-
-            prefer_observations=True,
-
-            # Original source facts behind observations
+            prefer_observations=False,
             include_source_facts=True,
-            max_source_facts_tokens=1600,
-
-            # Original retained text
-            include_chunks=True,
-            max_chunk_tokens=1800
+            max_source_facts_tokens=1000
         )
 
         historical_incidents = []
 
-        # Hindsight returns source facts at the response level.
-        source_facts = getattr(
-            recall_result,
-            "source_facts",
-            {}
-        ) or {}
-
-        # Hindsight returns original source chunks
-        # at the response level.
-        chunks = getattr(
-            recall_result,
-            "chunks",
-            {}
-        ) or {}
-
-        # ---------------------------------------------------------
-        # PROCESS TOP HISTORICAL MEMORIES
-        # ---------------------------------------------------------
-
         for result in recall_result.results[:3]:
-
-            memory_text = result.text
-
-            memory_type = getattr(
-                result,
-                "type",
-                None
-            )
-
-            if memory_type:
-                memory_text = (
-                    f"[Memory Type: {memory_type}]\n"
-                    f"{memory_text}"
-                )
-
-            # -----------------------------------------------------
-            # ADD ORIGINAL SOURCE FACTS
-            # -----------------------------------------------------
-
-            source_fact_ids = getattr(
-                result,
-                "source_fact_ids",
-                None
-            ) or []
-
-            if source_fact_ids:
-
-                memory_text += (
-                    "\n\nOriginal Historical Facts:\n"
-                )
-
-                for fact_id in source_fact_ids:
-
-                    fact = source_facts.get(
-                        fact_id
-                    )
-
-                    if fact:
-
-                        fact_text = getattr(
-                            fact,
-                            "text",
-                            None
-                        )
-
-                        fact_type = getattr(
-                            fact,
-                            "type",
-                            None
-                        )
-
-                        if fact_text:
-
-                            if fact_type:
-
-                                memory_text += (
-                                    f"- [{fact_type}] "
-                                    f"{fact_text}\n"
-                                )
-
-                            else:
-
-                                memory_text += (
-                                    f"- {fact_text}\n"
-                                )
-
-            # -----------------------------------------------------
-            # ADD ORIGINAL RETAINED CHUNK
-            # -----------------------------------------------------
-
-            chunk_id = getattr(
-                result,
-                "chunk_id",
-                None
-            )
-
-            if chunk_id:
-
-                chunk = chunks.get(
-                    chunk_id
-                )
-
-                if chunk:
-
-                    chunk_text = getattr(
-                        chunk,
-                        "text",
-                        None
-                    )
-
-                    if chunk_text:
-
-                        memory_text += (
-                            "\n\nOriginal Retained Post-Mortem:\n"
-                            f"{chunk_text}\n"
-                        )
 
             historical_incidents.append({
                 "id": result.id,
-                "memory": memory_text
+                "memory": result.text
             })
 
-        # ---------------------------------------------------------
-        # BUILD HISTORICAL EVIDENCE
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 2. PREPARE HINDSIGHT EVIDENCE
+        # --------------------------------
 
         evidence_parts = []
 
-        for index, incident in enumerate(
-            historical_incidents,
-            start=1
-        ):
+        for incident in historical_incidents:
 
             evidence_parts.append(
-                f"""
-HISTORICAL MEMORY {index}
--------------------------
-{incident["memory"]}
-"""
+                f"Historical Memory: {incident['memory']}"
             )
 
         if evidence_parts:
 
-            evidence = "\n".join(
-                evidence_parts
-            )
+            evidence = "\n".join(evidence_parts)
 
         else:
 
@@ -201,104 +80,53 @@ HISTORICAL MEMORY {index}
                 "No relevant historical memories found."
             )
 
-        # ---------------------------------------------------------
-        # AI INCIDENT ANALYSIS
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 3. BUILD AI PROMPT
+        # --------------------------------
 
         prompt = f"""
-You are an AI incident response assistant.
+You are an incident response assistant.
 
-Your job is to analyze the CURRENT production incident
-using current observations and relevant historical
-experience retrieved from Hindsight.
+Analyze this production incident:
 
-========================================================
-CURRENT INCIDENT
-========================================================
-
+INCIDENT:
 {incident_description}
 
-========================================================
-HISTORICAL EVIDENCE FROM HINDSIGHT
-========================================================
-
+HISTORICAL EVIDENCE FROM HINDSIGHT:
 {evidence}
 
-========================================================
-STRICT EVIDENCE RULES
-========================================================
+IMPORTANT RULES:
 
-1. The CURRENT INCIDENT is the primary source of truth
-for current symptoms and conditions.
+1. Use historical memories only when they share
+important symptoms, services, or failure conditions
+with the current incident.
 
-2. Never invent a current symptom, metric, infrastructure
-condition, deployment, root cause, or event.
+2. Prioritize memories with multiple matching signals.
 
-3. A fact mentioned only in historical evidence MUST NOT
-be described as a current fact.
+3. Treat historical memories as evidence, not proof.
 
-4. Never say the current incident has "confirmed" a root
-cause unless the current incident description explicitly
-confirms it.
+4. Do not use unrelated incidents.
 
-5. Historical incidents are evidence, not proof.
+5. Do not invent technical facts.
 
-6. Prefer historical incidents that match multiple signals:
-   - service
-   - error pattern
-   - traffic conditions
-   - infrastructure condition
-   - database behavior
-   - failure pattern
+6. Do not assume that a previous resolution will
+definitely solve the current incident.
 
-7. Do NOT select a historical incident merely because it
-contains the same HTTP status code.
+7. Recommend investigation before risky remediation.
 
-8. For example:
-   - HTTP 503 alone is not enough to conclude payment
-     gateway failure.
-   - Database connections near their configured maximum
-     are a stronger signal for database connection
-     saturation.
+8. If the evidence is insufficient, state that
+the root cause is uncertain.
 
-9. If a historical incident contains a confirmed root
-cause and successful resolution that closely matches the
-CURRENT INCIDENT, mention that historical pattern.
+9. Clearly distinguish between historical evidence,
+current observations, and inference.
 
-10. Do not blindly copy a historical root cause.
+10. Give practical investigation steps that an
+engineer can perform.
 
-11. Recommend investigation before risky remediation.
+11. Recommend remediation only after considering
+the available evidence.
 
-12. Historical remediation should be presented as a
-possible action only after appropriate investigation.
-
-13. Clearly distinguish:
-   CURRENT OBSERVATIONS
-   HISTORICAL EVIDENCE
-   INFERENCE
-
-14. If evidence is insufficient, say that the root cause
-is uncertain.
-
-15. Do not claim CPU saturation, memory exhaustion,
-deployment changes, configuration changes, database
-failures, or any other condition unless it is explicitly
-present in the CURRENT INCIDENT or clearly identified as
-historical evidence.
-
-16. The reasoning must explain WHY the selected historical
-memory is relevant.
-
-17. The recommended remediation should follow logically
-from the investigation and evidence.
-
-========================================================
-OUTPUT FORMAT
-========================================================
-
-Return ONLY valid JSON.
-
-Use exactly this structure:
+Return ONLY valid JSON in this exact format:
 
 {{
   "probable_root_cause": "string",
@@ -314,28 +142,21 @@ Use exactly this structure:
   ],
   "confidence": "High/Medium/Low"
 }}
-
-Do not add markdown.
-Do not add explanations outside the JSON.
 """
 
-        # ---------------------------------------------------------
-        # GENERATE RESPONSE USING LOCAL OLLAMA
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 4. GENERATE AI ANALYSIS
+        # --------------------------------
 
-        ai_response = generate_response(
-            prompt
-        )
+        ai_response = generate_response(prompt)
 
-        # ---------------------------------------------------------
-        # PARSE JSON
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 5. PARSE AI RESPONSE
+        # --------------------------------
 
         try:
 
-            analysis = json.loads(
-                ai_response
-            )
+            analysis = json.loads(ai_response)
 
         except json.JSONDecodeError:
 
@@ -356,9 +177,9 @@ Do not add explanations outside the JSON.
                     "Unknown"
             }
 
-        # ---------------------------------------------------------
-        # RETURN RESULT
-        # ---------------------------------------------------------
+        # --------------------------------
+        # 6. RETURN AGENT RESULT
+        # --------------------------------
 
         return {
             "incident":
